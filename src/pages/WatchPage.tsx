@@ -141,9 +141,9 @@ export function Component() {
       videoUrl = fullMovieSource.url;
       videoType = "video/youtube";
       techOrder = ["youtube"];
-    } else if (fullMovieSource && fullMovieSource.type !== 'stremio' && fullMovieSource.type !== 'youtube') {
+    } else if (fullMovieSource && ['hls', 'mp4', 'dash', 'webm'].includes(fullMovieSource.type)) {
       // Priority 4: Use full movie from video hosting service (HLS, MP4, etc.)
-      // Only use if it's not a sample video (we check if it's in MOVIE_VIDEO_SOURCES)
+      // Only use if it's a custom source (not sample videos)
       videoUrl = fullMovieSource.url;
       videoType = getVideoJsType(fullMovieSource);
       techOrder = undefined; // Use native HTML5 player for HLS/MP4
