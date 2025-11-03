@@ -23,15 +23,7 @@ export default function Footer() {
         }}
       >
         <Typography color="grey.700" variant="h6" component="span">
-          Developed by{" "}
-          <Link
-            target="_blank"
-            underline="none"
-            sx={{ color: "text.primary" }}
-            href="https://github.com/crazy-man22"
-          >
-            Crazy Man
-          </Link>
+          Developed by Denmark
         </Typography>
       </Divider>
     </Box>
