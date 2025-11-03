@@ -1,5 +1,5 @@
 import { Box, BoxProps } from "@mui/material";
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 
 interface VidsrcPlayerProps extends BoxProps {
   tmdbId: number;
@@ -64,8 +64,8 @@ export default function VidsrcPlayer({
     const iframe = iframeRef.current;
     if (!iframe) return;
 
-    let loadTimeout: NodeJS.Timeout;
-    let errorCheckTimeout: NodeJS.Timeout;
+    let loadTimeout: ReturnType<typeof setTimeout>;
+    let errorCheckTimeout: ReturnType<typeof setTimeout>;
 
     const handleLoad = () => {
       onLoad?.();
