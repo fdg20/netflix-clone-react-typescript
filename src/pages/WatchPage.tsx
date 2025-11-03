@@ -48,6 +48,8 @@ export function Component() {
   const [playerInitialized, setPlayerInitialized] = useState(false);
   const [settingsAnchorEl, setSettingsAnchorEl] = useState<null | HTMLElement>(null);
   const [subtitleEnabled, setSubtitleEnabled] = useState(false);
+  const [vidsrcError, setVidsrcError] = useState(false);
+  const [vidsrcLoading, setVidsrcLoading] = useState(true);
 
   const mediaTypeEnum = mediaType === "tv" ? MEDIA_TYPE.Tv : MEDIA_TYPE.Movie;
   const movieId = id ? parseInt(id, 10) : 0;
@@ -91,9 +93,34 @@ export function Component() {
   const isStremio = fullMovieSource?.type === 'stremio';
   
   const videoJsOptions = useMemo(() => {
-    // If using Vidsrc iframe, skip VideoJS setup
-    if (isVidsrc) {
+    // If using Vidsrc iframe and no error, skip VideoJS setup
+    if (isVidsrc && !vidsrcError) {
       return { width: 0, height: 0 }; // Return empty options to prevent VideoJS initialization
+    }
+    
+    // If Vidsrc failed, fall back to trailers
+    if (isVidsrc && vidsrcError) {
+      const videos = movieDetail?.videos?.results || [];
+      const trailer = videos.find(v => v.type === "Trailer" && v.site === "YouTube");
+      const teaser = videos.find(v => v.type === "Teaser" && v.site === "YouTube");
+      const clip = videos.find(v => v.type === "Clip" && v.site === "YouTube");
+      const firstVideo = videos.find(v => v.site === "YouTube");
+      const tmdbVideo = trailer || teaser || clip || firstVideo;
+      
+      if (tmdbVideo?.key) {
+        return {
+          preload: "metadata",
+          autoplay: true,
+          controls: false,
+          width: windowSize.width,
+          height: windowSize.height,
+          techOrder: ["youtube"],
+          sources: [{
+            src: `${YOUTUBE_URL}${tmdbVideo.key}`,
+            type: "video/youtube",
+          }],
+        };
+      }
     }
     
     // Stremio streams use VideoJS (they're direct video URLs)
@@ -167,7 +194,7 @@ export function Component() {
         },
       ],
     };
-  }, [windowSize, movieDetail, movieId, isVidsrc, isStremio, fullMovieSource]);
+  }, [windowSize, movieDetail, movieId, isVidsrc, isStremio, fullMovieSource, vidsrcError]);
 
   useEffect(() => {
     if (!mediaType || !id) {
@@ -258,7 +285,7 @@ export function Component() {
   }
 
   // Use Vidsrc iframe for full movies
-  if (isVidsrc && movieId) {
+  if (isVidsrc && movieId && !vidsrcError) {
     return (
       <Box
         sx={{
@@ -277,9 +304,28 @@ export function Component() {
             <KeyboardBackspaceIcon />
           </PlayerControlButton>
         </Box>
+        {vidsrcLoading && (
+          <Box
+            sx={{
+              position: "absolute",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              zIndex: 1001,
+              color: "white",
+            }}
+          >
+            <Typography variant="h6">Loading video...</Typography>
+          </Box>
+        )}
         <VidsrcPlayer
           tmdbId={movieId}
           mediaType={mediaTypeStr}
+          onLoad={() => setVidsrcLoading(false)}
+          onError={() => {
+            setVidsrcError(true);
+            setVidsrcLoading(false);
+          }}
           sx={{
             width: windowSize.width,
             height: windowSize.height,
@@ -288,6 +334,13 @@ export function Component() {
       </Box>
     );
   }
+
+  // If Vidsrc failed, fall back to trailers
+  // Note: This will automatically fall through to VideoJS player below
+  // We just need to ensure videoJsOptions is set up correctly
+
+  // Show error message if Vidsrc failed
+  const showVidsrcError = vidsrcError && isVidsrc;
 
   // Use VideoJS player for trailers and other sources
   if (videoJsOptions && !!videoJsOptions.width) {
@@ -298,6 +351,25 @@ export function Component() {
         }}
       >
         <VideoJSPlayer options={videoJsOptions} onReady={handlePlayerReady} />
+        {showVidsrcError && (
+          <Box
+            sx={{
+              position: "absolute",
+              top: 100,
+              left: "50%",
+              transform: "translateX(-50%)",
+              zIndex: 1001,
+              bgcolor: "rgba(255, 0, 0, 0.8)",
+              px: 2,
+              py: 1,
+              borderRadius: 1,
+            }}
+          >
+            <Typography variant="body2" color="white">
+              Full movie unavailable. Playing trailer instead.
+            </Typography>
+          </Box>
+        )}
         {playerRef.current && playerInitialized && (
           <Box
             sx={{
