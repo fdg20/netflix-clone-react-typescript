@@ -3,6 +3,7 @@
 ## Overview
 
 The video player now supports multiple video sources including:
+- **Vidsrc API** (✅ Integrated) - Free movie/TV streaming via embed API
 - **HLS streams** (`.m3u8`) - Best for adaptive streaming
 - **MP4 videos** - Direct video files
 - **DASH streams** - Alternative adaptive streaming
@@ -10,7 +11,23 @@ The video player now supports multiple video sources including:
 
 ## How to Add Full Movies
 
-### Option 1: Direct Video URLs (Quick Setup)
+### Option 1: Vidsrc API (✅ Already Integrated)
+
+**Vidsrc is already integrated and enabled by default!** It automatically provides full movies and TV shows using TMDB IDs.
+
+- **Status**: ✅ Active (enabled by default)
+- **API Documentation**: https://vidsrcme.ru/api/
+- **How it works**: Automatically fetches full movies from Vidsrc when you click play
+- **To disable**: Set `USE_VIDSRC = false` in `src/utils/videoSources.ts`
+
+The Vidsrc integration:
+- Uses TMDB movie IDs automatically
+- Provides full movies, not just trailers
+- Supports both movies and TV shows
+- Includes built-in player controls
+- Works immediately without configuration
+
+### Option 2: Direct Video URLs (Quick Setup)
 
 Edit `src/utils/videoSources.ts` and add your movie video URLs:
 
