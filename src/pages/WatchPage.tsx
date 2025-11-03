@@ -58,7 +58,18 @@ export function Component() {
   const windowSize = useWindowSize();
   
   const videoJsOptions = useMemo(() => {
-    const videoKey = movieDetail?.videos?.results?.[0]?.key;
+    // Prioritize Trailers, then Teasers, then Clips, then any other video
+    const videos = movieDetail?.videos?.results || [];
+    const trailer = videos.find(v => v.type === "Trailer" && v.site === "YouTube");
+    const teaser = videos.find(v => v.type === "Teaser" && v.site === "YouTube");
+    const clip = videos.find(v => v.type === "Clip" && v.site === "YouTube");
+    const firstVideo = videos.find(v => v.site === "YouTube");
+    
+    const selectedVideo = trailer || teaser || clip || firstVideo;
+    const videoKey = selectedVideo?.key;
+    
+    // Note: TMDB only provides trailers/teasers via YouTube, not full movies
+    // For full movies, you would need a separate streaming service
     const videoUrl = videoKey ? `${YOUTUBE_URL}${videoKey}` : "https://bitmovin-a.akamaihd.net/content/sintel/hls/playlist.m3u8";
     
     return {
