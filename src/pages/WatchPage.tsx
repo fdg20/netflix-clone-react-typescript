@@ -27,7 +27,7 @@ import PlayerControlButton from "src/components/watch/PlayerControlButton";
 import MainLoadingScreen from "src/components/MainLoadingScreen";
 import { useGetAppendedVideosQuery } from "src/store/slices/discover";
 import { MEDIA_TYPE } from "src/types/Common";
-import { getVideoSource, getVideoJsType, USE_VIDSRC } from "src/utils/videoSources";
+import { getVideoSource, getVideoJsType, getStremioVideoSource, USE_VIDSRC, USE_STREMIO } from "src/utils/videoSources";
 
 export function Component() {
   const { mediaType, id } = useParams<{ mediaType: string; id: string }>();
@@ -59,19 +59,44 @@ export function Component() {
 
   const windowSize = useWindowSize();
   
-  // Get video source - prioritize Vidsrc for full movies
+  // Get video source - prioritize Stremio, then Vidsrc for full movies
   const mediaTypeStr = mediaType === "tv" ? "tv" : "movie";
+  const [stremioSource, setStremioSource] = useState<{ url: string; type: string } | null>(null);
+  
+  // Try to fetch Stremio streams if enabled and IMDB ID is available
+  useEffect(() => {
+    if (USE_STREMIO && movieDetail?.imdb_id) {
+      getStremioVideoSource(
+        movieDetail.imdb_id,
+        mediaTypeStr
+      ).then(source => {
+        if (source) {
+          setStremioSource(source);
+        }
+      }).catch(err => {
+        console.error('Failed to fetch Stremio stream:', err);
+      });
+    }
+  }, [movieDetail?.imdb_id, mediaTypeStr]);
+  
   const fullMovieSource = useMemo(() => {
+    // Priority: Stremio > Vidsrc > Custom sources
+    if (stremioSource) {
+      return stremioSource;
+    }
     return getVideoSource(movieId, mediaTypeStr);
-  }, [movieId, mediaTypeStr]);
+  }, [movieId, mediaTypeStr, stremioSource]);
   
   const isVidsrc = fullMovieSource?.type === 'vidsrc';
+  const isStremio = fullMovieSource?.type === 'stremio';
   
   const videoJsOptions = useMemo(() => {
-    // If using Vidsrc, skip VideoJS setup
+    // If using Vidsrc iframe, skip VideoJS setup
     if (isVidsrc) {
       return { width: 0, height: 0 }; // Return empty options to prevent VideoJS initialization
     }
+    
+    // Stremio streams use VideoJS (they're direct video URLs)
     
     // Priority 2: Fallback to TMDB trailers if no full movie source
     const videos = movieDetail?.videos?.results || [];
@@ -86,11 +111,23 @@ export function Component() {
     let videoType: string;
     let techOrder: string[] | undefined;
     
-    if (fullMovieSource && fullMovieSource.type !== 'youtube' && fullMovieSource.type !== 'vidsrc') {
+    if (fullMovieSource && fullMovieSource.type !== 'youtube' && fullMovieSource.type !== 'vidsrc' && fullMovieSource.type !== 'stremio') {
       // Use full movie from video hosting service (HLS, MP4, etc.)
       videoUrl = fullMovieSource.url;
       videoType = getVideoJsType(fullMovieSource);
       techOrder = undefined; // Use native HTML5 player for HLS/MP4
+    } else if (fullMovieSource?.type === 'stremio') {
+      // Use Stremio stream
+      videoUrl = fullMovieSource.url;
+      // Determine video type from URL
+      if (videoUrl.includes('.m3u8')) {
+        videoType = 'application/x-mpegURL';
+      } else if (videoUrl.includes('.mpd')) {
+        videoType = 'application/dash+xml';
+      } else {
+        videoType = 'video/mp4';
+      }
+      techOrder = undefined;
     } else if (tmdbVideo?.key) {
       // Use TMDB trailer as fallback
       videoUrl = `${YOUTUBE_URL}${tmdbVideo.key}`;
@@ -130,7 +167,7 @@ export function Component() {
         },
       ],
     };
-  }, [windowSize, movieDetail, movieId, isVidsrc, fullMovieSource]);
+  }, [windowSize, movieDetail, movieId, isVidsrc, isStremio, fullMovieSource]);
 
   useEffect(() => {
     if (!mediaType || !id) {

@@ -12,7 +12,7 @@
 
 export interface VideoSource {
   url: string;
-  type: 'hls' | 'mp4' | 'youtube' | 'dash' | 'webm' | 'vidsrc';
+  type: 'hls' | 'mp4' | 'youtube' | 'dash' | 'webm' | 'vidsrc' | 'stremio';
   quality?: 'auto' | '1080p' | '720p' | '480p' | '360p';
 }
 
@@ -28,6 +28,13 @@ export const VIDSRC_DOMAINS = [
   'vidsrcme.su',
   'vsrc.su'
 ];
+
+/**
+ * Stremio Configuration
+ * Stremio uses addon-based streaming system
+ * Documentation: https://github.com/Stremio/stremio-addon-sdk
+ */
+export const USE_STREMIO = false; // Enable/disable Stremio integration
 
 // Video source mapping - Add your movie IDs and their video URLs here
 // Example format: movieId -> VideoSource
@@ -73,8 +80,46 @@ export function getVidsrcUrl(tmdbId: number, mediaType: 'movie' | 'tv', season?:
 }
 
 /**
+ * Get Stremio stream URL for a movie/TV show using IMDB ID
+ * This is an async function that fetches streams from Stremio addons
+ */
+export async function getStremioVideoSource(
+  imdbId: string | null | undefined,
+  mediaType: 'movie' | 'tv',
+  season?: number,
+  episode?: number
+): Promise<VideoSource | null> {
+  if (!USE_STREMIO || !imdbId) {
+    return null;
+  }
+
+  try {
+    const { getStremioStreams, getBestStremioStream, formatImdbId } = await import('./stremio');
+    const formattedImdbId = formatImdbId(imdbId);
+    const stremioType = mediaType === 'movie' ? 'movie' : 'series';
+    
+    const streams = await getStremioStreams(stremioType, formattedImdbId, season, episode);
+    
+    if (streams && streams.length > 0) {
+      const bestStream = getBestStremioStream(streams);
+      if (bestStream) {
+        return {
+          url: bestStream.url,
+          type: 'stremio',
+          quality: 'auto'
+        };
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching Stremio stream:', error);
+  }
+  
+  return null;
+}
+
+/**
  * Get video source for a movie
- * Priority: 1. Vidsrc (if enabled), 2. Custom mapping, 3. Sample videos (for demo)
+ * Priority: 1. Stremio (if enabled and IMDB ID available), 2. Vidsrc (if enabled), 3. Custom mapping, 4. Sample videos (for demo)
  */
 export function getVideoSource(movieId: number, mediaType: 'movie' | 'tv' = 'movie'): VideoSource | null {
   // Priority 1: Use Vidsrc if enabled
