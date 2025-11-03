@@ -229,13 +229,54 @@ export function Component() {
           width: "100vw",
           height: "100vh",
           overflow: "hidden",
+          // Prevent unwanted interactions
+          userSelect: "none",
+          WebkitUserSelect: "none",
         }}
+        onContextMenu={(e) => e.preventDefault()}
       >
         <Box px={2} sx={{ position: "absolute", top: 75, zIndex: 1000 }}>
           <PlayerControlButton onClick={handleGoBack}>
             <KeyboardBackspaceIcon />
           </PlayerControlButton>
         </Box>
+        {/* Additional protective overlay for edge areas */}
+        <Box
+          sx={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 999,
+            pointerEvents: "none",
+            // Block clicks in top/bottom/left/right edges where ads might appear
+            "&::before": {
+              content: '""',
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "10%",
+              pointerEvents: "auto",
+              cursor: "default",
+            },
+            "&::after": {
+              content: '""',
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              width: "100%",
+              height: "15%",
+              pointerEvents: "auto",
+              cursor: "default",
+            },
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
+        />
         <VidsrcPlayer
           tmdbId={movieId}
           mediaType={mediaTypeStr}
