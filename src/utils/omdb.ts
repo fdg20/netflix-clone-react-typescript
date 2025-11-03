@@ -71,15 +71,16 @@ export async function getOMDBMovieByImdbId(imdbId: string): Promise<OMDBMovie | 
       return null;
     }
 
-    const data: OMDBMovie = await response.json();
+    const data: OMDBMovie | OMDBErrorResponse = await response.json();
 
     // Check if response is valid
     if (data.Response === 'False') {
-      console.warn(`OMDB API: ${data.Error || 'Movie not found'}`);
+      const errorData = data as OMDBErrorResponse;
+      console.warn(`OMDB API: ${errorData.Error || 'Movie not found'}`);
       return null;
     }
 
-    return data;
+    return data as OMDBMovie;
   } catch (error) {
     console.error('Error fetching OMDB data:', error);
     return null;
@@ -111,15 +112,16 @@ export async function getOMDBMovieByTitle(
       return null;
     }
 
-    const data: OMDBMovie = await response.json();
+    const data: OMDBMovie | OMDBErrorResponse = await response.json();
 
     // Check if response is valid
     if (data.Response === 'False') {
-      console.warn(`OMDB API: ${data.Error || 'Movie not found'}`);
+      const errorData = data as OMDBErrorResponse;
+      console.warn(`OMDB API: ${errorData.Error || 'Movie not found'}`);
       return null;
     }
 
-    return data;
+    return data as OMDBMovie;
   } catch (error) {
     console.error('Error fetching OMDB data:', error);
     return null;
