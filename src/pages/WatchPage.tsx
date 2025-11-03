@@ -27,7 +27,7 @@ import PlayerControlButton from "src/components/watch/PlayerControlButton";
 import MainLoadingScreen from "src/components/MainLoadingScreen";
 import { useGetAppendedVideosQuery } from "src/store/slices/discover";
 import { MEDIA_TYPE } from "src/types/Common";
-import { getVideoSource, getVideoJsType, getStremioVideoSource, USE_VIDSRC, USE_STREMIO } from "src/utils/videoSources";
+import { getVideoSource, getVideoJsType, getStremioVideoSource, USE_VIDSRC, USE_STREMIO, VideoSource } from "src/utils/videoSources";
 
 export function Component() {
   const { mediaType, id } = useParams<{ mediaType: string; id: string }>();
@@ -61,7 +61,7 @@ export function Component() {
   
   // Get video source - prioritize Stremio, then Vidsrc for full movies
   const mediaTypeStr = mediaType === "tv" ? "tv" : "movie";
-  const [stremioSource, setStremioSource] = useState<{ url: string; type: string } | null>(null);
+  const [stremioSource, setStremioSource] = useState<VideoSource | null>(null);
   
   // Try to fetch Stremio streams if enabled and IMDB ID is available
   useEffect(() => {

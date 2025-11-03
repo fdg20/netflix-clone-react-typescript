@@ -81,13 +81,19 @@ export async function getStremioStreams(
         const addonBase = addonUrl.replace('/manifest.json', '');
         const streamUrl = `${addonBase}${resourceUrl}`;
         
+        // Create timeout controller
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), STREMIO_TIMEOUT);
+        
         const response = await fetch(streamUrl, {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
           },
-          signal: AbortSignal.timeout(STREMIO_TIMEOUT),
+          signal: controller.signal,
         });
+        
+        clearTimeout(timeoutId);
 
         if (response.ok) {
           const data: StremioStreamResponse = await response.json();
