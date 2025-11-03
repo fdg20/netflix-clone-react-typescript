@@ -21,13 +21,13 @@ import { YOUTUBE_URL } from "src/constant";
 import MaxLineTypography from "src/components/MaxLineTypography";
 import VolumeControllers from "src/components/watch/VolumeControllers";
 import VideoJSPlayer from "src/components/watch/VideoJSPlayer";
-import VidsrcPlayer from "src/components/watch/VidsrcPlayer";
 import PlayerSeekbar from "src/components/watch/PlayerSeekbar";
 import PlayerControlButton from "src/components/watch/PlayerControlButton";
 import MainLoadingScreen from "src/components/MainLoadingScreen";
 import { useGetAppendedVideosQuery } from "src/store/slices/discover";
 import { MEDIA_TYPE } from "src/types/Common";
-import { getVideoSource, getVideoJsType, getStremioVideoSource, USE_VIDSRC, USE_STREMIO, VideoSource } from "src/utils/videoSources";
+import { getVideoSource, getVideoJsType, getStremioVideoSource, USE_STREMIO, VideoSource } from "src/utils/videoSources";
+import { getOMDBMovieByImdbId } from "src/utils/omdb";
 
 export function Component() {
   const { mediaType, id } = useParams<{ mediaType: string; id: string }>();
@@ -48,8 +48,7 @@ export function Component() {
   const [playerInitialized, setPlayerInitialized] = useState(false);
   const [settingsAnchorEl, setSettingsAnchorEl] = useState<null | HTMLElement>(null);
   const [subtitleEnabled, setSubtitleEnabled] = useState(false);
-  const [vidsrcError, setVidsrcError] = useState(false);
-  const [vidsrcLoading, setVidsrcLoading] = useState(true);
+  const [omdbData, setOmdbData] = useState<any>(null);
 
   const mediaTypeEnum = mediaType === "tv" ? MEDIA_TYPE.Tv : MEDIA_TYPE.Movie;
   const movieId = id ? parseInt(id, 10) : 0;
@@ -61,10 +60,23 @@ export function Component() {
 
   const windowSize = useWindowSize();
   
-  // Get video source - prioritize Stremio, then Vidsrc for full movies
+  // Get video source - prioritize Stremio for full movies
   const mediaTypeStr = mediaType === "tv" ? "tv" : "movie";
   const [stremioSource, setStremioSource] = useState<VideoSource | null>(null);
   
+  // Fetch OMDB data for enhanced metadata
+  useEffect(() => {
+    if (movieDetail?.imdb_id) {
+      getOMDBMovieByImdbId(movieDetail.imdb_id).then(data => {
+        if (data) {
+          setOmdbData(data);
+        }
+      }).catch(err => {
+        console.error('Failed to fetch OMDB data:', err);
+      });
+    }
+  }, [movieDetail?.imdb_id]);
+
   // Try to fetch Stremio streams if enabled and IMDB ID is available
   useEffect(() => {
     if (USE_STREMIO && movieDetail?.imdb_id) {
@@ -82,50 +94,19 @@ export function Component() {
   }, [movieDetail?.imdb_id, mediaTypeStr]);
   
   const fullMovieSource = useMemo(() => {
-    // Priority: Stremio > Vidsrc > Custom sources
+    // Priority: Stremio > Custom sources
     if (stremioSource) {
       return stremioSource;
     }
     return getVideoSource(movieId, mediaTypeStr);
   }, [movieId, mediaTypeStr, stremioSource]);
   
-  const isVidsrc = fullMovieSource?.type === 'vidsrc';
   const isStremio = fullMovieSource?.type === 'stremio';
   
   const videoJsOptions = useMemo(() => {
-    // If using Vidsrc iframe and no error, skip VideoJS setup
-    if (isVidsrc && !vidsrcError) {
-      return { width: 0, height: 0 }; // Return empty options to prevent VideoJS initialization
-    }
-    
-    // If Vidsrc failed, fall back to trailers
-    if (isVidsrc && vidsrcError) {
-      const videos = movieDetail?.videos?.results || [];
-      const trailer = videos.find(v => v.type === "Trailer" && v.site === "YouTube");
-      const teaser = videos.find(v => v.type === "Teaser" && v.site === "YouTube");
-      const clip = videos.find(v => v.type === "Clip" && v.site === "YouTube");
-      const firstVideo = videos.find(v => v.site === "YouTube");
-      const tmdbVideo = trailer || teaser || clip || firstVideo;
-      
-      if (tmdbVideo?.key) {
-        return {
-          preload: "metadata",
-          autoplay: true,
-          controls: false,
-          width: windowSize.width,
-          height: windowSize.height,
-          techOrder: ["youtube"],
-          sources: [{
-            src: `${YOUTUBE_URL}${tmdbVideo.key}`,
-            type: "video/youtube",
-          }],
-        };
-      }
-    }
-    
     // Stremio streams use VideoJS (they're direct video URLs)
     
-    // Priority 2: Fallback to TMDB trailers if no full movie source
+    // Priority 1: Fallback to TMDB trailers if no full movie source
     const videos = movieDetail?.videos?.results || [];
     const trailer = videos.find(v => v.type === "Trailer" && v.site === "YouTube");
     const teaser = videos.find(v => v.type === "Teaser" && v.site === "YouTube");
@@ -138,7 +119,7 @@ export function Component() {
     let videoType: string;
     let techOrder: string[] | undefined;
     
-    if (fullMovieSource && fullMovieSource.type !== 'youtube' && fullMovieSource.type !== 'vidsrc' && fullMovieSource.type !== 'stremio') {
+    if (fullMovieSource && fullMovieSource.type !== 'youtube' && fullMovieSource.type !== 'stremio') {
       // Use full movie from video hosting service (HLS, MP4, etc.)
       videoUrl = fullMovieSource.url;
       videoType = getVideoJsType(fullMovieSource);
@@ -194,7 +175,7 @@ export function Component() {
         },
       ],
     };
-  }, [windowSize, movieDetail, movieId, isVidsrc, isStremio, fullMovieSource, vidsrcError]);
+  }, [windowSize, movieDetail, movieId, isStremio, fullMovieSource]);
 
   useEffect(() => {
     if (!mediaType || !id) {
@@ -284,64 +265,6 @@ export function Component() {
     return <MainLoadingScreen />;
   }
 
-  // Use Vidsrc iframe for full movies
-  if (isVidsrc && movieId && !vidsrcError) {
-    return (
-      <Box
-        sx={{
-          position: "relative",
-          width: "100vw",
-          height: "100vh",
-          overflow: "hidden",
-          // Prevent unwanted interactions
-          userSelect: "none",
-          WebkitUserSelect: "none",
-        }}
-        onContextMenu={(e) => e.preventDefault()}
-      >
-        <Box px={2} sx={{ position: "absolute", top: 75, zIndex: 1000 }}>
-          <PlayerControlButton onClick={handleGoBack}>
-            <KeyboardBackspaceIcon />
-          </PlayerControlButton>
-        </Box>
-        {vidsrcLoading && (
-          <Box
-            sx={{
-              position: "absolute",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              zIndex: 1001,
-              color: "white",
-            }}
-          >
-            <Typography variant="h6">Loading video...</Typography>
-          </Box>
-        )}
-        <VidsrcPlayer
-          tmdbId={movieId}
-          mediaType={mediaTypeStr}
-          onLoad={() => setVidsrcLoading(false)}
-          onError={() => {
-            setVidsrcError(true);
-            setVidsrcLoading(false);
-          }}
-          sx={{
-            width: windowSize.width,
-            height: windowSize.height,
-          }}
-        />
-      </Box>
-    );
-  }
-
-  // If Vidsrc failed, fall back to trailers
-  // Note: This will automatically fall through to VideoJS player below
-  // We just need to ensure videoJsOptions is set up correctly
-
-  // Show error message if Vidsrc failed
-  const showVidsrcError = vidsrcError && isVidsrc;
-
   // Use VideoJS player for trailers and other sources
   if (videoJsOptions && !!videoJsOptions.width) {
     return (
@@ -351,23 +274,30 @@ export function Component() {
         }}
       >
         <VideoJSPlayer options={videoJsOptions} onReady={handlePlayerReady} />
-        {showVidsrcError && (
+        {omdbData && (
           <Box
             sx={{
               position: "absolute",
               top: 100,
-              left: "50%",
-              transform: "translateX(-50%)",
+              right: 20,
               zIndex: 1001,
-              bgcolor: "rgba(255, 0, 0, 0.8)",
+              bgcolor: "rgba(0, 0, 0, 0.7)",
               px: 2,
               py: 1,
               borderRadius: 1,
+              maxWidth: 300,
             }}
           >
-            <Typography variant="body2" color="white">
-              Full movie unavailable. Playing trailer instead.
-            </Typography>
+            {omdbData.imdbRating && (
+              <Typography variant="body2" color="white" sx={{ mb: 0.5 }}>
+                IMDB: {omdbData.imdbRating}/10
+              </Typography>
+            )}
+            {omdbData.Ratings?.find((r: any) => r.Source === "Rotten Tomatoes") && (
+              <Typography variant="body2" color="white">
+                Rotten Tomatoes: {omdbData.Ratings.find((r: any) => r.Source === "Rotten Tomatoes")?.Value}
+              </Typography>
+            )}
           </Box>
         )}
         {playerRef.current && playerInitialized && (

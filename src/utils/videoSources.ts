@@ -2,32 +2,19 @@
  * Video Source Configuration
  * 
  * This file manages video sources for movies. You can:
- * 1. Use Vidsrc API (integrated) - automatically provides full movies
- * 2. Add video URLs directly here for specific movies
- * 3. Integrate with a video hosting service (AWS S3, CloudFront, Mux, etc.)
- * 4. Use environment variables for video CDN URLs
+ * 1. Add video URLs directly here for specific movies
+ * 2. Integrate with a video hosting service (AWS S3, CloudFront, Mux, etc.)
+ * 3. Use environment variables for video CDN URLs
+ * 4. Use Stremio for streaming (if enabled)
  * 
  * Format: Movie ID -> Video URL or configuration
  */
 
 export interface VideoSource {
   url: string;
-  type: 'hls' | 'mp4' | 'youtube' | 'dash' | 'webm' | 'vidsrc' | 'stremio';
+  type: 'hls' | 'mp4' | 'youtube' | 'dash' | 'webm' | 'stremio';
   quality?: 'auto' | '1080p' | '720p' | '480p' | '360p';
 }
-
-/**
- * Vidsrc API Configuration
- * Vidsrc provides free movie/TV streaming via embed API
- * Documentation: https://vidsrcme.ru/api/
- */
-export const USE_VIDSRC = true; // Enable/disable Vidsrc integration
-export const VIDSRC_DOMAINS = [
-  'vidsrc-embed.ru',
-  'vidsrc-embed.su',
-  'vidsrcme.su',
-  'vsrc.su'
-];
 
 /**
  * Stremio Configuration
@@ -60,24 +47,6 @@ const SAMPLE_VIDEOS: VideoSource[] = [
     quality: '1080p'
   },
 ];
-
-/**
- * Get Vidsrc embed URL for a movie or TV show
- */
-export function getVidsrcUrl(tmdbId: number, mediaType: 'movie' | 'tv', season?: number, episode?: number): string {
-  const domain = VIDSRC_DOMAINS[0]; // Use primary domain
-  const baseUrl = `https://${domain}/embed`;
-  
-  if (mediaType === 'movie') {
-    return `${baseUrl}/movie?tmdb=${tmdbId}&autoplay=1`;
-  } else if (mediaType === 'tv') {
-    if (season && episode) {
-      return `${baseUrl}/tv?tmdb=${tmdbId}&season=${season}&episode=${episode}&autoplay=1`;
-    }
-    return `${baseUrl}/tv?tmdb=${tmdbId}&autoplay=1`;
-  }
-  return `${baseUrl}/movie?tmdb=${tmdbId}&autoplay=1`;
-}
 
 /**
  * Get Stremio stream URL for a movie/TV show using IMDB ID
@@ -119,24 +88,15 @@ export async function getStremioVideoSource(
 
 /**
  * Get video source for a movie
- * Priority: 1. Stremio (if enabled and IMDB ID available), 2. Vidsrc (if enabled), 3. Custom mapping, 4. Sample videos (for demo)
+ * Priority: 1. Stremio (if enabled and IMDB ID available), 2. Custom mapping, 3. Sample videos (for demo)
  */
 export function getVideoSource(movieId: number, mediaType: 'movie' | 'tv' = 'movie'): VideoSource | null {
-  // Priority 1: Use Vidsrc if enabled
-  if (USE_VIDSRC) {
-    return {
-      url: getVidsrcUrl(movieId, mediaType),
-      type: 'vidsrc',
-      quality: 'auto'
-    };
-  }
-  
-  // Priority 2: Check if we have a custom source for this movie
+  // Priority 1: Check if we have a custom source for this movie
   if (MOVIE_VIDEO_SOURCES[movieId]) {
     return MOVIE_VIDEO_SOURCES[movieId];
   }
   
-  // Priority 3: For demo purposes, return a sample video
+  // Priority 2: For demo purposes, return a sample video
   // In production, you would return null or fetch from your video hosting service
   const randomSample = SAMPLE_VIDEOS[Math.floor(Math.random() * SAMPLE_VIDEOS.length)];
   return randomSample;
