@@ -1,7 +1,7 @@
 import { CustomGenre } from "src/types/Genre";
 
 export const API_ENDPOINT_URL = import.meta.env.VITE_APP_API_ENDPOINT_URL || "https://api.themoviedb.org/3";
-export const TMDB_V3_API_KEY = import.meta.env.VITE_APP_TMDB_V3_API_KEY;
+export const TMDB_V3_API_KEY = import.meta.env.VITE_APP_TMDB_V3_API_KEY?.trim() || "";
 
 export const MAIN_PATH = {
   root: "",
