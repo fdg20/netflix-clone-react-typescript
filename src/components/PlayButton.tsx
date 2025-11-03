@@ -2,9 +2,24 @@ import Button, { ButtonProps } from "@mui/material/Button";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import { useNavigate } from "react-router-dom";
 import { MAIN_PATH } from "src/constant";
+import { MEDIA_TYPE } from "src/types/Common";
 
-export default function PlayButton({ sx, ...others }: ButtonProps) {
+interface PlayButtonProps extends ButtonProps {
+  mediaType?: MEDIA_TYPE;
+  movieId?: number;
+}
+
+export default function PlayButton({ sx, mediaType, movieId, ...others }: PlayButtonProps) {
   const navigate = useNavigate();
+  const handleClick = () => {
+    if (mediaType && movieId) {
+      const mediaTypePath = mediaType === MEDIA_TYPE.Tv ? "tv" : "movie";
+      navigate(`/${MAIN_PATH.watch}/${mediaTypePath}/${movieId}`);
+    } else {
+      navigate(`/${MAIN_PATH.browse}`);
+    }
+  };
+  
   return (
     <Button
       color="inherit"
@@ -31,7 +46,7 @@ export default function PlayButton({ sx, ...others }: ButtonProps) {
         textTransform: "capitalize",
         ...sx,
       }}
-      onClick={() => navigate(`/${MAIN_PATH.watch}`)}
+      onClick={handleClick}
     >
       Play
     </Button>

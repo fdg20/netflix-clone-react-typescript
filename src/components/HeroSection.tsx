@@ -218,7 +218,7 @@ export default function TopTrailer({ mediaType }: TopTrailerProps) {
                     {video.overview}
                   </MaxLineTypography>
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                    <PlayButton size="large" />
+                    <PlayButton size="large" mediaType={mediaType} movieId={video.id} />
                     <MoreInfoButton
                       size="large"
                       onClick={() => {

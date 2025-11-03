@@ -27,7 +27,12 @@ const router = createBrowserRouter([
       },
       {
         path: MAIN_PATH.watch,
-        lazy: () => import("src/pages/WatchPage"),
+        children: [
+          {
+            path: ":mediaType/:id",
+            lazy: () => import("src/pages/WatchPage"),
+          },
+        ],
       },
     ],
   },

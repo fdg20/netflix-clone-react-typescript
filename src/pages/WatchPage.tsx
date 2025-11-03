@@ -1,18 +1,22 @@
-import { useState, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useRef, useMemo, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import Player from "video.js/dist/types/player";
-import { Box, Stack, Typography } from "@mui/material";
+import { Box, Stack, Typography, Menu, MenuItem } from "@mui/material";
 import { SliderUnstyledOwnProps } from "@mui/base/SliderUnstyled";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import PauseIcon from "@mui/icons-material/Pause";
 import SkipNextIcon from "@mui/icons-material/SkipNext";
 import FullscreenIcon from "@mui/icons-material/Fullscreen";
+import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
 import SettingsIcon from "@mui/icons-material/Settings";
 import BrandingWatermarkOutlinedIcon from "@mui/icons-material/BrandingWatermarkOutlined";
 import KeyboardBackspaceIcon from "@mui/icons-material/KeyboardBackspace";
+import SubtitlesIcon from "@mui/icons-material/Subtitles";
+import ClosedCaptionIcon from "@mui/icons-material/ClosedCaption";
 
 import useWindowSize from "src/hooks/useWindowSize";
 import { formatTime } from "src/utils/common";
+import { YOUTUBE_URL } from "src/constant";
 
 import MaxLineTypography from "src/components/MaxLineTypography";
 import VolumeControllers from "src/components/watch/VolumeControllers";
@@ -20,9 +24,15 @@ import VideoJSPlayer from "src/components/watch/VideoJSPlayer";
 import PlayerSeekbar from "src/components/watch/PlayerSeekbar";
 import PlayerControlButton from "src/components/watch/PlayerControlButton";
 import MainLoadingScreen from "src/components/MainLoadingScreen";
+import { useGetAppendedVideosQuery } from "src/store/slices/discover";
+import { MEDIA_TYPE } from "src/types/Common";
 
 export function Component() {
+  const { mediaType, id } = useParams<{ mediaType: string; id: string }>();
+  const navigate = useNavigate();
   const playerRef = useRef<Player | null>(null);
+  const settingsMenuRef = useRef<HTMLButtonElement | null>(null);
+  
   const [playerState, setPlayerState] = useState({
     paused: false,
     muted: false,
@@ -30,32 +40,48 @@ export function Component() {
     duration: 0,
     volume: 0.8,
     loaded: 0,
+    isFullscreen: false,
   });
 
-  const navigate = useNavigate();
   const [playerInitialized, setPlayerInitialized] = useState(false);
+  const [settingsAnchorEl, setSettingsAnchorEl] = useState<null | HTMLElement>(null);
+  const [subtitleEnabled, setSubtitleEnabled] = useState(false);
+
+  const mediaTypeEnum = mediaType === "tv" ? MEDIA_TYPE.Tv : MEDIA_TYPE.Movie;
+  const movieId = id ? parseInt(id, 10) : 0;
+
+  const { data: movieDetail, isLoading } = useGetAppendedVideosQuery(
+    { mediaType: mediaTypeEnum, id: movieId },
+    { skip: !movieId }
+  );
 
   const windowSize = useWindowSize();
+  
   const videoJsOptions = useMemo(() => {
+    const videoKey = movieDetail?.videos?.results?.[0]?.key;
+    const videoUrl = videoKey ? `${YOUTUBE_URL}${videoKey}` : "https://bitmovin-a.akamaihd.net/content/sintel/hls/playlist.m3u8";
+    
     return {
       preload: "metadata",
       autoplay: true,
       controls: false,
-      // responsive: true,
-      // fluid: true,
       width: windowSize.width,
       height: windowSize.height,
+      techOrder: videoKey ? ["youtube"] : undefined,
       sources: [
         {
-          // src: videoData?.video,
-          // src: "https://d2zihajmogu5jn.cloudfront.net/bipbop-advanced/bipbop_16x9_variant.m3u8",
-          src: "https://bitmovin-a.akamaihd.net/content/sintel/hls/playlist.m3u8",
-          type: "application/x-mpegurl",
+          src: videoUrl,
+          type: videoKey ? "video/youtube" : "application/x-mpegurl",
         },
       ],
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [windowSize]);
+  }, [windowSize, movieDetail]);
+
+  useEffect(() => {
+    if (!mediaType || !id) {
+      navigate("/browse");
+    }
+  }, [mediaType, id, navigate]);
 
   const handlePlayerReady = function (player: Player): void {
     player.on("pause", () => {
@@ -81,6 +107,13 @@ export function Component() {
       setPlayerState((draft) => ({ ...draft, duration: player.duration() }));
     });
 
+    player.on("fullscreenchange", () => {
+      setPlayerState((draft) => ({
+        ...draft,
+        isFullscreen: player.isFullscreen(),
+      }));
+    });
+
     playerRef.current = player;
 
     setPlayerState((draft) => {
@@ -102,6 +135,35 @@ export function Component() {
   const handleGoBack = () => {
     navigate("/browse");
   };
+
+  const handleFullscreen = () => {
+    if (playerRef.current) {
+      if (playerRef.current.isFullscreen()) {
+        playerRef.current.exitFullscreen();
+      } else {
+        playerRef.current.requestFullscreen();
+      }
+    }
+  };
+
+  const handleSettingsOpen = (event: React.MouseEvent<HTMLButtonElement>) => {
+    setSettingsAnchorEl(event.currentTarget);
+  };
+
+  const handleSettingsClose = () => {
+    setSettingsAnchorEl(null);
+  };
+
+  const handleSubtitleToggle = () => {
+    setSubtitleEnabled(!subtitleEnabled);
+    handleSettingsClose();
+    // Note: Video.js subtitle support would need additional configuration
+    // This is a basic toggle for UI
+  };
+
+  if (isLoading || !movieDetail) {
+    return <MainLoadingScreen />;
+  }
 
   if (!!videoJsOptions.width) {
     return (
@@ -125,46 +187,6 @@ export function Component() {
               <PlayerControlButton onClick={handleGoBack}>
                 <KeyboardBackspaceIcon />
               </PlayerControlButton>
-            </Box>
-            <Box
-              px={2}
-              sx={{
-                position: "absolute",
-                top: { xs: "40%", sm: "55%", md: "60%" },
-                left: 0,
-              }}
-            >
-              <Typography
-                variant="h3"
-                sx={{
-                  fontWeight: 700,
-                  color: "white",
-                }}
-              >
-                Title
-              </Typography>
-            </Box>
-            <Box
-              px={{ xs: 0, sm: 1, md: 2 }}
-              sx={{
-                position: "absolute",
-                top: { xs: "50%", sm: "60%", md: "70%" },
-                right: 0,
-              }}
-            >
-              <Typography
-                variant="subtitle2"
-                sx={{
-                  px: 1,
-                  py: 0.5,
-                  fontWeight: 700,
-                  color: "white",
-                  bgcolor: "red",
-                  borderRadius: "12px 0px 0px 12px",
-                }}
-              >
-                12+
-              </Typography>
             </Box>
 
             <Box
@@ -236,7 +258,7 @@ export function Component() {
                     textAlign="center"
                     sx={{ maxWidth: 300, mx: "auto", color: "white" }}
                   >
-                    Description
+                    {movieDetail?.title || movieDetail?.name || "Description"}
                   </MaxLineTypography>
                 </Box>
                 {/* end middle time */}
@@ -247,14 +269,45 @@ export function Component() {
                   alignItems="center"
                   spacing={{ xs: 0.5, sm: 1.5, md: 2 }}
                 >
-                  <PlayerControlButton>
+                  <PlayerControlButton
+                    ref={settingsMenuRef}
+                    onClick={handleSettingsOpen}
+                  >
                     <SettingsIcon />
                   </PlayerControlButton>
+                  <Menu
+                    anchorEl={settingsAnchorEl}
+                    open={Boolean(settingsAnchorEl)}
+                    onClose={handleSettingsClose}
+                    PaperProps={{
+                      sx: {
+                        bgcolor: "rgba(0, 0, 0, 0.9)",
+                        color: "white",
+                      },
+                    }}
+                  >
+                    <MenuItem onClick={handleSubtitleToggle}>
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        {subtitleEnabled ? (
+                          <ClosedCaptionIcon sx={{ color: "white" }} />
+                        ) : (
+                          <SubtitlesIcon sx={{ color: "white" }} />
+                        )}
+                        <Typography>
+                          {subtitleEnabled ? "Disable Subtitles" : "Enable Subtitles"}
+                        </Typography>
+                      </Stack>
+                    </MenuItem>
+                  </Menu>
                   <PlayerControlButton>
                     <BrandingWatermarkOutlinedIcon />
                   </PlayerControlButton>
-                  <PlayerControlButton>
-                    <FullscreenIcon />
+                  <PlayerControlButton onClick={handleFullscreen}>
+                    {playerState.isFullscreen ? (
+                      <FullscreenExitIcon />
+                    ) : (
+                      <FullscreenIcon />
+                    )}
                   </PlayerControlButton>
                 </Stack>
                 {/* end right controller */}
@@ -266,7 +319,7 @@ export function Component() {
       </Box>
     );
   }
-  return null;
+  return <MainLoadingScreen />;
 }
 
 Component.displayName = "WatchPage";

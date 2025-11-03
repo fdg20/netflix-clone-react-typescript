@@ -23,7 +23,15 @@ export default function Footer() {
         }}
       >
         <Typography color="grey.700" variant="h6" component="span">
-          Developed by Denmark
+          Developed by{" "}
+          <Link
+            target="_blank"
+            underline="none"
+            sx={{ color: "text.primary" }}
+            href="https://fdg20.github.io/denmark/"
+          >
+            Denmark
+          </Link>
         </Typography>
       </Divider>
     </Box>
