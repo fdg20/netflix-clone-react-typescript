@@ -258,7 +258,7 @@ export function Component() {
                     textAlign="center"
                     sx={{ maxWidth: 300, mx: "auto", color: "white" }}
                   >
-                    {movieDetail?.title || movieDetail?.name || "Description"}
+                    {movieDetail?.title || "Description"}
                   </MaxLineTypography>
                 </Box>
                 {/* end middle time */}
