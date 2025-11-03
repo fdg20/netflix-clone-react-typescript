@@ -104,9 +104,9 @@ export function Component() {
   const isStremio = fullMovieSource?.type === 'stremio';
   
   const videoJsOptions = useMemo(() => {
-    // Stremio streams use VideoJS (they're direct video URLs)
+    // Priority: TMDB trailers > Stremio > Custom sources > Sample videos
     
-    // Priority 1: Fallback to TMDB trailers if no full movie source
+    // Get TMDB videos
     const videos = movieDetail?.videos?.results || [];
     const trailer = videos.find(v => v.type === "Trailer" && v.site === "YouTube");
     const teaser = videos.find(v => v.type === "Teaser" && v.site === "YouTube");
@@ -114,18 +114,18 @@ export function Component() {
     const firstVideo = videos.find(v => v.site === "YouTube");
     const tmdbVideo = trailer || teaser || clip || firstVideo;
     
-    // Determine video source
+    // Determine video source - prioritize TMDB trailers first
     let videoUrl: string;
     let videoType: string;
     let techOrder: string[] | undefined;
     
-    if (fullMovieSource && fullMovieSource.type !== 'youtube' && fullMovieSource.type !== 'stremio') {
-      // Use full movie from video hosting service (HLS, MP4, etc.)
-      videoUrl = fullMovieSource.url;
-      videoType = getVideoJsType(fullMovieSource);
-      techOrder = undefined; // Use native HTML5 player for HLS/MP4
+    if (tmdbVideo?.key) {
+      // Priority 1: Use TMDB trailer (most relevant to the movie)
+      videoUrl = `${YOUTUBE_URL}${tmdbVideo.key}`;
+      videoType = "video/youtube";
+      techOrder = ["youtube"];
     } else if (fullMovieSource?.type === 'stremio') {
-      // Use Stremio stream
+      // Priority 2: Use Stremio stream
       videoUrl = fullMovieSource.url;
       // Determine video type from URL
       if (videoUrl.includes('.m3u8')) {
@@ -136,18 +136,19 @@ export function Component() {
         videoType = 'video/mp4';
       }
       techOrder = undefined;
-    } else if (tmdbVideo?.key) {
-      // Use TMDB trailer as fallback
-      videoUrl = `${YOUTUBE_URL}${tmdbVideo.key}`;
-      videoType = "video/youtube";
-      techOrder = ["youtube"];
-    } else if (fullMovieSource?.type === 'youtube') {
-      // YouTube video from custom source
+    } else if (fullMovieSource && fullMovieSource.type === 'youtube') {
+      // Priority 3: YouTube video from custom source
       videoUrl = fullMovieSource.url;
       videoType = "video/youtube";
       techOrder = ["youtube"];
+    } else if (fullMovieSource && fullMovieSource.type !== 'stremio' && fullMovieSource.type !== 'youtube') {
+      // Priority 4: Use full movie from video hosting service (HLS, MP4, etc.)
+      // Only use if it's not a sample video (we check if it's in MOVIE_VIDEO_SOURCES)
+      videoUrl = fullMovieSource.url;
+      videoType = getVideoJsType(fullMovieSource);
+      techOrder = undefined; // Use native HTML5 player for HLS/MP4
     } else {
-      // Default sample video
+      // Priority 5: Default sample video (last resort)
       videoUrl = "https://bitmovin-a.akamaihd.net/content/sintel/hls/playlist.m3u8";
       videoType = "application/x-mpegURL";
       techOrder = undefined;

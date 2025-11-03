@@ -88,18 +88,17 @@ export async function getStremioVideoSource(
 
 /**
  * Get video source for a movie
- * Priority: 1. Stremio (if enabled and IMDB ID available), 2. Custom mapping, 3. Sample videos (for demo)
+ * Priority: 1. Custom mapping, 2. Returns null (so TMDB trailers can be used)
  */
 export function getVideoSource(movieId: number, mediaType: 'movie' | 'tv' = 'movie'): VideoSource | null {
-  // Priority 1: Check if we have a custom source for this movie
+  // Check if we have a custom source for this movie
   if (MOVIE_VIDEO_SOURCES[movieId]) {
     return MOVIE_VIDEO_SOURCES[movieId];
   }
   
-  // Priority 2: For demo purposes, return a sample video
+  // Return null to allow TMDB trailers to be used as fallback
   // In production, you would return null or fetch from your video hosting service
-  const randomSample = SAMPLE_VIDEOS[Math.floor(Math.random() * SAMPLE_VIDEOS.length)];
-  return randomSample;
+  return null;
 }
 
 /**
