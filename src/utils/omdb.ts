@@ -43,6 +43,11 @@ export interface OMDBMovie {
   Response: string;
 }
 
+export interface OMDBErrorResponse {
+  Response: string;
+  Error?: string;
+}
+
 /**
  * Fetch movie data from OMDB API using IMDB ID
  * @param imdbId IMDB ID (e.g., "tt3896198")
