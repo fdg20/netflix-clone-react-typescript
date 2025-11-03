@@ -21,12 +21,13 @@ import { YOUTUBE_URL } from "src/constant";
 import MaxLineTypography from "src/components/MaxLineTypography";
 import VolumeControllers from "src/components/watch/VolumeControllers";
 import VideoJSPlayer from "src/components/watch/VideoJSPlayer";
+import VidsrcPlayer from "src/components/watch/VidsrcPlayer";
 import PlayerSeekbar from "src/components/watch/PlayerSeekbar";
 import PlayerControlButton from "src/components/watch/PlayerControlButton";
 import MainLoadingScreen from "src/components/MainLoadingScreen";
 import { useGetAppendedVideosQuery } from "src/store/slices/discover";
 import { MEDIA_TYPE } from "src/types/Common";
-import { getVideoSource, getVideoJsType } from "src/utils/videoSources";
+import { getVideoSource, getVideoJsType, USE_VIDSRC } from "src/utils/videoSources";
 
 export function Component() {
   const { mediaType, id } = useParams<{ mediaType: string; id: string }>();
@@ -58,9 +59,19 @@ export function Component() {
 
   const windowSize = useWindowSize();
   
+  // Get video source - prioritize Vidsrc for full movies
+  const mediaTypeStr = mediaType === "tv" ? "tv" : "movie";
+  const fullMovieSource = useMemo(() => {
+    return getVideoSource(movieId, mediaTypeStr);
+  }, [movieId, mediaTypeStr]);
+  
+  const isVidsrc = fullMovieSource?.type === 'vidsrc';
+  
   const videoJsOptions = useMemo(() => {
-    // Priority 1: Check if we have a full movie source from video hosting
-    const fullMovieSource = getVideoSource(movieId);
+    // If using Vidsrc, skip VideoJS setup
+    if (isVidsrc) {
+      return { width: 0, height: 0 }; // Return empty options to prevent VideoJS initialization
+    }
     
     // Priority 2: Fallback to TMDB trailers if no full movie source
     const videos = movieDetail?.videos?.results || [];
@@ -75,8 +86,8 @@ export function Component() {
     let videoType: string;
     let techOrder: string[] | undefined;
     
-    if (fullMovieSource && fullMovieSource.type !== 'youtube') {
-      // Use full movie from video hosting service
+    if (fullMovieSource && fullMovieSource.type !== 'youtube' && fullMovieSource.type !== 'vidsrc') {
+      // Use full movie from video hosting service (HLS, MP4, etc.)
       videoUrl = fullMovieSource.url;
       videoType = getVideoJsType(fullMovieSource);
       techOrder = undefined; // Use native HTML5 player for HLS/MP4
@@ -119,7 +130,7 @@ export function Component() {
         },
       ],
     };
-  }, [windowSize, movieDetail, movieId]);
+  }, [windowSize, movieDetail, movieId, isVidsrc, fullMovieSource]);
 
   useEffect(() => {
     if (!mediaType || !id) {
@@ -209,7 +220,36 @@ export function Component() {
     return <MainLoadingScreen />;
   }
 
-  if (!!videoJsOptions.width) {
+  // Use Vidsrc iframe for full movies
+  if (isVidsrc && movieId) {
+    return (
+      <Box
+        sx={{
+          position: "relative",
+          width: "100vw",
+          height: "100vh",
+          overflow: "hidden",
+        }}
+      >
+        <Box px={2} sx={{ position: "absolute", top: 75, zIndex: 1000 }}>
+          <PlayerControlButton onClick={handleGoBack}>
+            <KeyboardBackspaceIcon />
+          </PlayerControlButton>
+        </Box>
+        <VidsrcPlayer
+          tmdbId={movieId}
+          mediaType={mediaTypeStr}
+          sx={{
+            width: windowSize.width,
+            height: windowSize.height,
+          }}
+        />
+      </Box>
+    );
+  }
+
+  // Use VideoJS player for trailers and other sources
+  if (videoJsOptions && !!videoJsOptions.width) {
     return (
       <Box
         sx={{
