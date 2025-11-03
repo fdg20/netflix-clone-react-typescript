@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import Player from "video.js/dist/types/player";
 import videojs from "video.js";
 import "videojs-youtube";
+import "@videojs/http-streaming";
 import "video.js/dist/video-js.css";
 
 export default function VideoJSPlayer({
@@ -60,13 +61,22 @@ export default function VideoJSPlayer({
         //   }
         // ));
 
-        // You could update an existing player in the `else` block here
-        // on prop change, for example:
+        // Update existing player when options change
       } else {
         const player = playerRef.current;
-        // player.autoplay(options.autoplay);
+        // Update player dimensions
         player.width(options.width);
         player.height(options.height);
+        
+        // Update video source if it changed
+        if (options.sources && options.sources.length > 0) {
+          const currentSrc = player.currentSrc();
+          const newSrc = options.sources[0].src;
+          if (currentSrc !== newSrc) {
+            player.src(options.sources);
+            player.load();
+          }
+        }
       }
     })();
   }, [options, videoRef]);

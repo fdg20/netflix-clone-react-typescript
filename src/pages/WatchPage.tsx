@@ -26,6 +26,7 @@ import PlayerControlButton from "src/components/watch/PlayerControlButton";
 import MainLoadingScreen from "src/components/MainLoadingScreen";
 import { useGetAppendedVideosQuery } from "src/store/slices/discover";
 import { MEDIA_TYPE } from "src/types/Common";
+import { getVideoSource, getVideoJsType } from "src/utils/videoSources";
 
 export function Component() {
   const { mediaType, id } = useParams<{ mediaType: string; id: string }>();
@@ -58,19 +59,43 @@ export function Component() {
   const windowSize = useWindowSize();
   
   const videoJsOptions = useMemo(() => {
-    // Prioritize Trailers, then Teasers, then Clips, then any other video
+    // Priority 1: Check if we have a full movie source from video hosting
+    const fullMovieSource = getVideoSource(movieId);
+    
+    // Priority 2: Fallback to TMDB trailers if no full movie source
     const videos = movieDetail?.videos?.results || [];
     const trailer = videos.find(v => v.type === "Trailer" && v.site === "YouTube");
     const teaser = videos.find(v => v.type === "Teaser" && v.site === "YouTube");
     const clip = videos.find(v => v.type === "Clip" && v.site === "YouTube");
     const firstVideo = videos.find(v => v.site === "YouTube");
+    const tmdbVideo = trailer || teaser || clip || firstVideo;
     
-    const selectedVideo = trailer || teaser || clip || firstVideo;
-    const videoKey = selectedVideo?.key;
+    // Determine video source
+    let videoUrl: string;
+    let videoType: string;
+    let techOrder: string[] | undefined;
     
-    // Note: TMDB only provides trailers/teasers via YouTube, not full movies
-    // For full movies, you would need a separate streaming service
-    const videoUrl = videoKey ? `${YOUTUBE_URL}${videoKey}` : "https://bitmovin-a.akamaihd.net/content/sintel/hls/playlist.m3u8";
+    if (fullMovieSource && fullMovieSource.type !== 'youtube') {
+      // Use full movie from video hosting service
+      videoUrl = fullMovieSource.url;
+      videoType = getVideoJsType(fullMovieSource);
+      techOrder = undefined; // Use native HTML5 player for HLS/MP4
+    } else if (tmdbVideo?.key) {
+      // Use TMDB trailer as fallback
+      videoUrl = `${YOUTUBE_URL}${tmdbVideo.key}`;
+      videoType = "video/youtube";
+      techOrder = ["youtube"];
+    } else if (fullMovieSource?.type === 'youtube') {
+      // YouTube video from custom source
+      videoUrl = fullMovieSource.url;
+      videoType = "video/youtube";
+      techOrder = ["youtube"];
+    } else {
+      // Default sample video
+      videoUrl = "https://bitmovin-a.akamaihd.net/content/sintel/hls/playlist.m3u8";
+      videoType = "application/x-mpegURL";
+      techOrder = undefined;
+    }
     
     return {
       preload: "metadata",
@@ -78,15 +103,23 @@ export function Component() {
       controls: false,
       width: windowSize.width,
       height: windowSize.height,
-      techOrder: videoKey ? ["youtube"] : undefined,
+      techOrder,
+      html5: {
+        vhs: {
+          overrideNative: true,
+        },
+        nativeVideoTracks: false,
+        nativeAudioTracks: false,
+        nativeTextTracks: false,
+      },
       sources: [
         {
           src: videoUrl,
-          type: videoKey ? "video/youtube" : "application/x-mpegurl",
+          type: videoType,
         },
       ],
     };
-  }, [windowSize, movieDetail]);
+  }, [windowSize, movieDetail, movieId]);
 
   useEffect(() => {
     if (!mediaType || !id) {
