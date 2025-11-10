@@ -88,7 +88,8 @@ export async function getStremioVideoSource(
 
 /**
  * Get video source for a movie
- * Priority: 1. Custom mapping, 2. Returns null (so TMDB trailers can be used)
+ * Returns custom video source if available, otherwise null
+ * Note: Trailers are no longer used as fallback - only full movie sources are allowed
  */
 export function getVideoSource(movieId: number, mediaType: 'movie' | 'tv' = 'movie'): VideoSource | null {
   // Check if we have a custom source for this movie
@@ -96,8 +97,8 @@ export function getVideoSource(movieId: number, mediaType: 'movie' | 'tv' = 'mov
     return MOVIE_VIDEO_SOURCES[movieId];
   }
   
-  // Return null to allow TMDB trailers to be used as fallback
-  // In production, you would return null or fetch from your video hosting service
+  // Return null if no custom source is available
+  // The watch page will show an error message instead of falling back to trailers
   return null;
 }
 

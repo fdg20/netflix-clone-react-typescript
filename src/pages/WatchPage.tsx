@@ -16,7 +16,6 @@ import ClosedCaptionIcon from "@mui/icons-material/ClosedCaption";
 
 import useWindowSize from "src/hooks/useWindowSize";
 import { formatTime } from "src/utils/common";
-import { YOUTUBE_URL } from "src/constant";
 
 import MaxLineTypography from "src/components/MaxLineTypography";
 import VolumeControllers from "src/components/watch/VolumeControllers";
@@ -104,28 +103,15 @@ export function Component() {
   const isStremio = fullMovieSource?.type === 'stremio';
   
   const videoJsOptions = useMemo(() => {
-    // Priority: TMDB trailers > Stremio > Custom sources > Sample videos
+    // Only use full movie sources - no trailer fallbacks
     
-    // Get TMDB videos
-    const videos = movieDetail?.videos?.results || [];
-    const trailer = videos.find(v => v.type === "Trailer" && v.site === "YouTube");
-    const teaser = videos.find(v => v.type === "Teaser" && v.site === "YouTube");
-    const clip = videos.find(v => v.type === "Clip" && v.site === "YouTube");
-    const firstVideo = videos.find(v => v.site === "YouTube");
-    const tmdbVideo = trailer || teaser || clip || firstVideo;
-    
-    // Determine video source - prioritize TMDB trailers first
-    let videoUrl: string;
-    let videoType: string;
+    // Determine video source - only full movie sources allowed
+    let videoUrl: string | null = null;
+    let videoType: string | null = null;
     let techOrder: string[] | undefined;
     
-    if (tmdbVideo?.key) {
-      // Priority 1: Use TMDB trailer (most relevant to the movie)
-      videoUrl = `${YOUTUBE_URL}${tmdbVideo.key}`;
-      videoType = "video/youtube";
-      techOrder = ["youtube"];
-    } else if (fullMovieSource?.type === 'stremio') {
-      // Priority 2: Use Stremio stream
+    if (fullMovieSource?.type === 'stremio') {
+      // Priority 1: Use Stremio stream (full movie)
       videoUrl = fullMovieSource.url;
       // Determine video type from URL
       if (videoUrl.includes('.m3u8')) {
@@ -137,21 +123,20 @@ export function Component() {
       }
       techOrder = undefined;
     } else if (fullMovieSource && fullMovieSource.type === 'youtube') {
-      // Priority 3: YouTube video from custom source
+      // Priority 2: YouTube video from custom source (full movie)
       videoUrl = fullMovieSource.url;
       videoType = "video/youtube";
       techOrder = ["youtube"];
     } else if (fullMovieSource && ['hls', 'mp4', 'dash', 'webm'].includes(fullMovieSource.type)) {
-      // Priority 4: Use full movie from video hosting service (HLS, MP4, etc.)
-      // Only use if it's a custom source (not sample videos)
+      // Priority 3: Use full movie from video hosting service (HLS, MP4, etc.)
       videoUrl = fullMovieSource.url;
       videoType = getVideoJsType(fullMovieSource);
       techOrder = undefined; // Use native HTML5 player for HLS/MP4
-    } else {
-      // Priority 5: Default sample video (last resort)
-      videoUrl = "https://bitmovin-a.akamaihd.net/content/sintel/hls/playlist.m3u8";
-      videoType = "application/x-mpegURL";
-      techOrder = undefined;
+    }
+    
+    // Only return video options if we have a valid full movie source
+    if (!videoUrl || !videoType) {
+      return null;
     }
     
     return {
@@ -266,7 +251,35 @@ export function Component() {
     return <MainLoadingScreen />;
   }
 
-  // Use VideoJS player for trailers and other sources
+  // Only render player if we have a valid full movie source
+  if (!videoJsOptions) {
+    return (
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: "100vh",
+          bgcolor: "black",
+          color: "white",
+        }}
+      >
+        <Typography variant="h5" sx={{ mb: 2 }}>
+          Full movie source not available
+        </Typography>
+        <Typography variant="body1" sx={{ mb: 3, textAlign: "center", maxWidth: 500 }}>
+          The full movie is not available at this time. Please check back later or try another title.
+        </Typography>
+        <PlayerControlButton onClick={handleGoBack}>
+          <KeyboardBackspaceIcon sx={{ mr: 1 }} />
+          <Typography>Go Back</Typography>
+        </PlayerControlButton>
+      </Box>
+    );
+  }
+
+  // Use VideoJS player for full movie sources only
   if (videoJsOptions && !!videoJsOptions.width) {
     return (
       <Box
