@@ -137,9 +137,10 @@ export default function VidsrcPlayer({
         ref={iframeRef}
         component="iframe"
         src={getVidsrcUrl(currentDomainIndex)}
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        key={`vidsrc-${currentDomainIndex}-${tmdbId}`}
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         allowFullScreen
-        sandbox="allow-scripts allow-same-origin allow-presentation allow-popups allow-forms"
+        loading="eager"
         sx={{
           border: "none",
           width: "100%",
@@ -147,7 +148,8 @@ export default function VidsrcPlayer({
           position: "absolute",
           top: 0,
           left: 0,
-          zIndex: 0,
+          zIndex: 1,
+          pointerEvents: "auto",
         }}
       />
     </Box>
