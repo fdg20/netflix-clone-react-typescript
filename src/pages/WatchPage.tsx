@@ -20,12 +20,13 @@ import { formatTime } from "src/utils/common";
 import MaxLineTypography from "src/components/MaxLineTypography";
 import VolumeControllers from "src/components/watch/VolumeControllers";
 import VideoJSPlayer from "src/components/watch/VideoJSPlayer";
+import VidsrcPlayer from "src/components/watch/VidsrcPlayer";
 import PlayerSeekbar from "src/components/watch/PlayerSeekbar";
 import PlayerControlButton from "src/components/watch/PlayerControlButton";
 import MainLoadingScreen from "src/components/MainLoadingScreen";
 import { useGetAppendedVideosQuery } from "src/store/slices/discover";
 import { MEDIA_TYPE } from "src/types/Common";
-import { getVideoSource, getVideoJsType, getStremioVideoSource, USE_STREMIO, VideoSource } from "src/utils/videoSources";
+import { getVideoSource, getVideoJsType, getStremioVideoSource, getVidsrcVideoSource, USE_STREMIO, USE_VIDSRC, VideoSource } from "src/utils/videoSources";
 import { getOMDBMovieByImdbId } from "src/utils/omdb";
 
 export function Component() {
@@ -59,9 +60,10 @@ export function Component() {
 
   const windowSize = useWindowSize();
   
-  // Get video source - prioritize Stremio for full movies
+  // Get video source - prioritize Stremio > Vidsrc > Custom sources
   const mediaTypeStr = mediaType === "tv" ? "tv" : "movie";
   const [stremioSource, setStremioSource] = useState<VideoSource | null>(null);
+  const [vidsrcSource, setVidsrcSource] = useState<VideoSource | null>(null);
   
   // Fetch OMDB data for enhanced metadata
   useEffect(() => {
@@ -91,19 +93,43 @@ export function Component() {
       });
     }
   }, [movieDetail?.imdb_id, mediaTypeStr]);
+
+  // Try to get Vidsrc source if enabled and TMDB ID is available
+  useEffect(() => {
+    if (USE_VIDSRC && movieId && movieDetail) {
+      const vidsrcSource = getVidsrcVideoSource(
+        movieId,
+        movieDetail.imdb_id,
+        mediaTypeStr
+      );
+      if (vidsrcSource) {
+        setVidsrcSource(vidsrcSource);
+      }
+    }
+  }, [movieId, movieDetail?.imdb_id, mediaTypeStr]);
   
   const fullMovieSource = useMemo(() => {
-    // Priority: Stremio > Custom sources
+    // Priority: Stremio > Vidsrc > Custom sources
     if (stremioSource) {
       return stremioSource;
     }
+    if (vidsrcSource) {
+      return vidsrcSource;
+    }
     return getVideoSource(movieId, mediaTypeStr);
-  }, [movieId, mediaTypeStr, stremioSource]);
+  }, [movieId, mediaTypeStr, stremioSource, vidsrcSource]);
   
   const isStremio = fullMovieSource?.type === 'stremio';
+  const isVidsrc = fullMovieSource?.type === 'vidsrc';
   
   const videoJsOptions = useMemo(() => {
     // Only use full movie sources - no trailer fallbacks
+    // Note: Vidsrc uses its own player component, so exclude it here
+    
+    // Skip if source is Vidsrc (uses VidsrcPlayer component instead)
+    if (fullMovieSource?.type === 'vidsrc') {
+      return null;
+    }
     
     // Determine video source - only full movie sources allowed
     let videoUrl: string | null = null;
@@ -252,7 +278,7 @@ export function Component() {
   }
 
   // Only render player if we have a valid full movie source
-  if (!videoJsOptions) {
+  if (!fullMovieSource) {
     return (
       <Box
         sx={{
@@ -279,7 +305,63 @@ export function Component() {
     );
   }
 
-  // Use VideoJS player for full movie sources only
+  // Use Vidsrc player if Vidsrc source is available
+  if (isVidsrc && fullMovieSource.tmdbId) {
+    return (
+      <Box
+        sx={{
+          position: "relative",
+          width: "100vw",
+          height: "100vh",
+          bgcolor: "black",
+        }}
+      >
+        <Box px={2} sx={{ position: "absolute", top: 20, zIndex: 1001 }}>
+          <PlayerControlButton onClick={handleGoBack}>
+            <KeyboardBackspaceIcon />
+          </PlayerControlButton>
+        </Box>
+        {omdbData && (
+          <Box
+            sx={{
+              position: "absolute",
+              top: 100,
+              right: 20,
+              zIndex: 1001,
+              bgcolor: "rgba(0, 0, 0, 0.7)",
+              px: 2,
+              py: 1,
+              borderRadius: 1,
+              maxWidth: 300,
+            }}
+          >
+            {omdbData.imdbRating && (
+              <Typography variant="body2" color="white" sx={{ mb: 0.5 }}>
+                IMDB: {omdbData.imdbRating}/10
+              </Typography>
+            )}
+            {omdbData.Ratings?.find((r: any) => r.Source === "Rotten Tomatoes") && (
+              <Typography variant="body2" color="white">
+                Rotten Tomatoes: {omdbData.Ratings.find((r: any) => r.Source === "Rotten Tomatoes")?.Value}
+              </Typography>
+            )}
+          </Box>
+        )}
+        <VidsrcPlayer
+          tmdbId={fullMovieSource.tmdbId}
+          mediaType={mediaTypeStr}
+          season={fullMovieSource.season}
+          episode={fullMovieSource.episode}
+          sx={{
+            width: "100%",
+            height: "100%",
+          }}
+        />
+      </Box>
+    );
+  }
+
+  // Use VideoJS player for other full movie sources (Stremio, HLS, MP4, etc.)
   if (videoJsOptions && !!videoJsOptions.width) {
     return (
       <Box

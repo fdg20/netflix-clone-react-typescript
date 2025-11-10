@@ -6,15 +6,28 @@
  * 2. Integrate with a video hosting service (AWS S3, CloudFront, Mux, etc.)
  * 3. Use environment variables for video CDN URLs
  * 4. Use Stremio for streaming (if enabled)
+ * 5. Use Vidsrc API for free movie/TV streaming (if enabled)
  * 
  * Format: Movie ID -> Video URL or configuration
  */
 
 export interface VideoSource {
   url: string;
-  type: 'hls' | 'mp4' | 'youtube' | 'dash' | 'webm' | 'stremio';
+  type: 'hls' | 'mp4' | 'youtube' | 'dash' | 'webm' | 'stremio' | 'vidsrc';
   quality?: 'auto' | '1080p' | '720p' | '480p' | '360p';
+  // For Vidsrc, we store the embed URL and metadata
+  tmdbId?: number;
+  imdbId?: string;
+  season?: number;
+  episode?: number;
 }
+
+/**
+ * Vidsrc Configuration
+ * Vidsrc provides free movie/TV streaming via embed API
+ * Documentation: https://vidsrcme.ru/api/
+ */
+export const USE_VIDSRC = true; // Enable/disable Vidsrc integration (enabled by default)
 
 /**
  * Stremio Configuration
@@ -47,6 +60,63 @@ const SAMPLE_VIDEOS: VideoSource[] = [
     quality: '1080p'
   },
 ];
+
+/**
+ * Get Vidsrc embed URL for a movie/TV show
+ * Vidsrc supports both IMDB and TMDB IDs
+ * Documentation: https://vidsrcme.ru/api/
+ */
+export function getVidsrcVideoSource(
+  tmdbId: number,
+  imdbId: string | null | undefined,
+  mediaType: 'movie' | 'tv',
+  season?: number,
+  episode?: number
+): VideoSource | null {
+  if (!USE_VIDSRC || !tmdbId) {
+    return null;
+  }
+
+  // Vidsrc domains (will be used by VidsrcPlayer component)
+  const domain = 'vidsrc-embed.ru';
+  let embedUrl = '';
+  
+  if (mediaType === 'movie') {
+    // Prefer IMDB ID if available, otherwise use TMDB
+    if (imdbId) {
+      embedUrl = `https://${domain}/embed/movie?imdb=${imdbId}&autoplay=1`;
+    } else {
+      embedUrl = `https://${domain}/embed/movie?tmdb=${tmdbId}&autoplay=1`;
+    }
+  } else {
+    // TV show
+    if (season !== undefined && episode !== undefined) {
+      // Episode
+      if (imdbId) {
+        embedUrl = `https://${domain}/embed/tv?imdb=${imdbId}&season=${season}&episode=${episode}&autoplay=1`;
+      } else {
+        embedUrl = `https://${domain}/embed/tv?tmdb=${tmdbId}&season=${season}&episode=${episode}&autoplay=1`;
+      }
+    } else {
+      // TV show (no specific episode)
+      if (imdbId) {
+        embedUrl = `https://${domain}/embed/tv?imdb=${imdbId}&autoplay=1`;
+      } else {
+        embedUrl = `https://${domain}/embed/tv?tmdb=${tmdbId}&autoplay=1`;
+      }
+    }
+  }
+
+  return {
+    url: embedUrl,
+    type: 'vidsrc',
+    quality: 'auto',
+    tmdbId,
+    imdbId: imdbId || undefined,
+    season,
+    episode,
+  };
+}
 
 /**
  * Get Stremio stream URL for a movie/TV show using IMDB ID
