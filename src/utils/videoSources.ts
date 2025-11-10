@@ -2,39 +2,32 @@
  * Video Source Configuration
  * 
  * This file manages video sources for movies. You can:
- * 1. Add video URLs directly here for specific movies
- * 2. Integrate with a video hosting service (AWS S3, CloudFront, Mux, etc.)
- * 3. Use environment variables for video CDN URLs
- * 4. Use Stremio for streaming (if enabled)
- * 5. Use Vidsrc API for free movie/TV streaming (if enabled)
+ * 1. Use Vidsrc API (integrated) - automatically provides full movies
+ * 2. Add video URLs directly here for specific movies
+ * 3. Integrate with a video hosting service (AWS S3, CloudFront, Mux, etc.)
+ * 4. Use environment variables for video CDN URLs
  * 
  * Format: Movie ID -> Video URL or configuration
  */
 
 export interface VideoSource {
   url: string;
-  type: 'hls' | 'mp4' | 'youtube' | 'dash' | 'webm' | 'stremio' | 'vidsrc';
+  type: 'hls' | 'mp4' | 'youtube' | 'dash' | 'webm' | 'vidsrc';
   quality?: 'auto' | '1080p' | '720p' | '480p' | '360p';
-  // For Vidsrc, we store the embed URL and metadata
-  tmdbId?: number;
-  imdbId?: string;
-  season?: number;
-  episode?: number;
 }
 
 /**
- * Vidsrc Configuration
+ * Vidsrc API Configuration
  * Vidsrc provides free movie/TV streaming via embed API
  * Documentation: https://vidsrcme.ru/api/
  */
-export const USE_VIDSRC = true; // Enable/disable Vidsrc integration (enabled by default)
-
-/**
- * Stremio Configuration
- * Stremio uses addon-based streaming system
- * Documentation: https://github.com/Stremio/stremio-addon-sdk
- */
-export const USE_STREMIO = false; // Enable/disable Stremio integration
+export const USE_VIDSRC = true; // Enable/disable Vidsrc integration
+export const VIDSRC_DOMAINS = [
+  'vidsrc-embed.ru',
+  'vidsrc-embed.su',
+  'vidsrcme.su',
+  'vsrc.su'
+];
 
 // Video source mapping - Add your movie IDs and their video URLs here
 // Example format: movieId -> VideoSource
@@ -62,114 +55,46 @@ const SAMPLE_VIDEOS: VideoSource[] = [
 ];
 
 /**
- * Get Vidsrc embed URL for a movie/TV show
- * Vidsrc supports both IMDB and TMDB IDs
- * Documentation: https://vidsrcme.ru/api/
+ * Get Vidsrc embed URL for a movie or TV show
  */
-export function getVidsrcVideoSource(
-  tmdbId: number,
-  imdbId: string | null | undefined,
-  mediaType: 'movie' | 'tv',
-  season?: number,
-  episode?: number
-): VideoSource | null {
-  if (!USE_VIDSRC || !tmdbId) {
-    return null;
-  }
-
-  // Vidsrc domains (will be used by VidsrcPlayer component)
-  const domain = 'vidsrc-embed.ru';
-  let embedUrl = '';
+export function getVidsrcUrl(tmdbId: number, mediaType: 'movie' | 'tv', season?: number, episode?: number): string {
+  const domain = VIDSRC_DOMAINS[0]; // Use primary domain
+  const baseUrl = `https://${domain}/embed`;
   
   if (mediaType === 'movie') {
-    // Prefer IMDB ID if available, otherwise use TMDB
-    if (imdbId) {
-      embedUrl = `https://${domain}/embed/movie?imdb=${imdbId}&autoplay=1`;
-    } else {
-      embedUrl = `https://${domain}/embed/movie?tmdb=${tmdbId}&autoplay=1`;
+    return `${baseUrl}/movie?tmdb=${tmdbId}&autoplay=1`;
+  } else if (mediaType === 'tv') {
+    if (season && episode) {
+      return `${baseUrl}/tv?tmdb=${tmdbId}&season=${season}&episode=${episode}&autoplay=1`;
     }
-  } else {
-    // TV show
-    if (season !== undefined && episode !== undefined) {
-      // Episode
-      if (imdbId) {
-        embedUrl = `https://${domain}/embed/tv?imdb=${imdbId}&season=${season}&episode=${episode}&autoplay=1`;
-      } else {
-        embedUrl = `https://${domain}/embed/tv?tmdb=${tmdbId}&season=${season}&episode=${episode}&autoplay=1`;
-      }
-    } else {
-      // TV show (no specific episode)
-      if (imdbId) {
-        embedUrl = `https://${domain}/embed/tv?imdb=${imdbId}&autoplay=1`;
-      } else {
-        embedUrl = `https://${domain}/embed/tv?tmdb=${tmdbId}&autoplay=1`;
-      }
-    }
+    return `${baseUrl}/tv?tmdb=${tmdbId}&autoplay=1`;
   }
-
-  return {
-    url: embedUrl,
-    type: 'vidsrc',
-    quality: 'auto',
-    tmdbId,
-    imdbId: imdbId || undefined,
-    season,
-    episode,
-  };
-}
-
-/**
- * Get Stremio stream URL for a movie/TV show using IMDB ID
- * This is an async function that fetches streams from Stremio addons
- */
-export async function getStremioVideoSource(
-  imdbId: string | null | undefined,
-  mediaType: 'movie' | 'tv',
-  season?: number,
-  episode?: number
-): Promise<VideoSource | null> {
-  if (!USE_STREMIO || !imdbId) {
-    return null;
-  }
-
-  try {
-    const { getStremioStreams, getBestStremioStream, formatImdbId } = await import('./stremio');
-    const formattedImdbId = formatImdbId(imdbId);
-    const stremioType = mediaType === 'movie' ? 'movie' : 'series';
-    
-    const streams = await getStremioStreams(stremioType, formattedImdbId, season, episode);
-    
-    if (streams && streams.length > 0) {
-      const bestStream = getBestStremioStream(streams);
-      if (bestStream) {
-        return {
-          url: bestStream.url,
-          type: 'stremio',
-          quality: 'auto'
-        };
-      }
-    }
-  } catch (error) {
-    console.error('Error fetching Stremio stream:', error);
-  }
-  
-  return null;
+  return `${baseUrl}/movie?tmdb=${tmdbId}&autoplay=1`;
 }
 
 /**
  * Get video source for a movie
- * Returns custom video source if available, otherwise null
- * Note: Trailers are no longer used as fallback - only full movie sources are allowed
+ * Priority: 1. Vidsrc (if enabled), 2. Custom mapping, 3. Sample videos (for demo)
  */
 export function getVideoSource(movieId: number, mediaType: 'movie' | 'tv' = 'movie'): VideoSource | null {
-  // Check if we have a custom source for this movie
+  // Priority 1: Use Vidsrc if enabled
+  if (USE_VIDSRC) {
+    return {
+      url: getVidsrcUrl(movieId, mediaType),
+      type: 'vidsrc',
+      quality: 'auto'
+    };
+  }
+  
+  // Priority 2: Check if we have a custom source for this movie
   if (MOVIE_VIDEO_SOURCES[movieId]) {
     return MOVIE_VIDEO_SOURCES[movieId];
   }
   
-  // Return null if no custom source is available
-  // The watch page will show an error message instead of falling back to trailers
-  return null;
+  // Priority 3: For demo purposes, return a sample video
+  // In production, you would return null or fetch from your video hosting service
+  const randomSample = SAMPLE_VIDEOS[Math.floor(Math.random() * SAMPLE_VIDEOS.length)];
+  return randomSample;
 }
 
 /**
@@ -198,4 +123,3 @@ export function getVideoJsType(source: VideoSource): string {
 export function hasVideoSource(movieId: number): boolean {
   return !!MOVIE_VIDEO_SOURCES[movieId] || true; // For demo, always return true
 }
-

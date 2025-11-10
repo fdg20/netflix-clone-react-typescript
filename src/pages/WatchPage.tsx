@@ -16,6 +16,7 @@ import ClosedCaptionIcon from "@mui/icons-material/ClosedCaption";
 
 import useWindowSize from "src/hooks/useWindowSize";
 import { formatTime } from "src/utils/common";
+import { YOUTUBE_URL } from "src/constant";
 
 import MaxLineTypography from "src/components/MaxLineTypography";
 import VolumeControllers from "src/components/watch/VolumeControllers";
@@ -26,8 +27,7 @@ import PlayerControlButton from "src/components/watch/PlayerControlButton";
 import MainLoadingScreen from "src/components/MainLoadingScreen";
 import { useGetAppendedVideosQuery } from "src/store/slices/discover";
 import { MEDIA_TYPE } from "src/types/Common";
-import { getVideoSource, getVideoJsType, getStremioVideoSource, getVidsrcVideoSource, USE_STREMIO, USE_VIDSRC, VideoSource } from "src/utils/videoSources";
-import { getOMDBMovieByImdbId } from "src/utils/omdb";
+import { getVideoSource, getVideoJsType, USE_VIDSRC } from "src/utils/videoSources";
 
 export function Component() {
   const { mediaType, id } = useParams<{ mediaType: string; id: string }>();
@@ -48,7 +48,6 @@ export function Component() {
   const [playerInitialized, setPlayerInitialized] = useState(false);
   const [settingsAnchorEl, setSettingsAnchorEl] = useState<null | HTMLElement>(null);
   const [subtitleEnabled, setSubtitleEnabled] = useState(false);
-  const [omdbData, setOmdbData] = useState<any>(null);
 
   const mediaTypeEnum = mediaType === "tv" ? MEDIA_TYPE.Tv : MEDIA_TYPE.Movie;
   const movieId = id ? parseInt(id, 10) : 0;
@@ -60,109 +59,53 @@ export function Component() {
 
   const windowSize = useWindowSize();
   
-  // Get video source - prioritize Stremio > Vidsrc > Custom sources
+  // Get video source - prioritize Vidsrc for full movies
   const mediaTypeStr = mediaType === "tv" ? "tv" : "movie";
-  const [stremioSource, setStremioSource] = useState<VideoSource | null>(null);
-  const [vidsrcSource, setVidsrcSource] = useState<VideoSource | null>(null);
-  
-  // Fetch OMDB data for enhanced metadata
-  useEffect(() => {
-    if (movieDetail?.imdb_id) {
-      getOMDBMovieByImdbId(movieDetail.imdb_id).then(data => {
-        if (data) {
-          setOmdbData(data);
-        }
-      }).catch(err => {
-        console.error('Failed to fetch OMDB data:', err);
-      });
-    }
-  }, [movieDetail?.imdb_id]);
-
-  // Try to fetch Stremio streams if enabled and IMDB ID is available
-  useEffect(() => {
-    if (USE_STREMIO && movieDetail?.imdb_id) {
-      getStremioVideoSource(
-        movieDetail.imdb_id,
-        mediaTypeStr
-      ).then(source => {
-        if (source) {
-          setStremioSource(source);
-        }
-      }).catch(err => {
-        console.error('Failed to fetch Stremio stream:', err);
-      });
-    }
-  }, [movieDetail?.imdb_id, mediaTypeStr]);
-
-  // Try to get Vidsrc source if enabled and TMDB ID is available
-  useEffect(() => {
-    if (USE_VIDSRC && movieId && movieDetail) {
-      const vidsrcSource = getVidsrcVideoSource(
-        movieId,
-        movieDetail.imdb_id,
-        mediaTypeStr
-      );
-      if (vidsrcSource) {
-        setVidsrcSource(vidsrcSource);
-      }
-    }
-  }, [movieId, movieDetail?.imdb_id, mediaTypeStr]);
-  
   const fullMovieSource = useMemo(() => {
-    // Priority: Stremio > Vidsrc > Custom sources
-    if (stremioSource) {
-      return stremioSource;
-    }
-    if (vidsrcSource) {
-      return vidsrcSource;
-    }
     return getVideoSource(movieId, mediaTypeStr);
-  }, [movieId, mediaTypeStr, stremioSource, vidsrcSource]);
+  }, [movieId, mediaTypeStr]);
   
-  const isStremio = fullMovieSource?.type === 'stremio';
   const isVidsrc = fullMovieSource?.type === 'vidsrc';
   
   const videoJsOptions = useMemo(() => {
-    // Only use full movie sources - no trailer fallbacks
-    // Note: Vidsrc uses its own player component, so exclude it here
-    
-    // Skip if source is Vidsrc (uses VidsrcPlayer component instead)
-    if (fullMovieSource?.type === 'vidsrc') {
-      return null;
+    // If using Vidsrc, skip VideoJS setup
+    if (isVidsrc) {
+      return { width: 0, height: 0 }; // Return empty options to prevent VideoJS initialization
     }
     
-    // Determine video source - only full movie sources allowed
-    let videoUrl: string | null = null;
-    let videoType: string | null = null;
+    // Priority 2: Fallback to TMDB trailers if no full movie source
+    const videos = movieDetail?.videos?.results || [];
+    const trailer = videos.find(v => v.type === "Trailer" && v.site === "YouTube");
+    const teaser = videos.find(v => v.type === "Teaser" && v.site === "YouTube");
+    const clip = videos.find(v => v.type === "Clip" && v.site === "YouTube");
+    const firstVideo = videos.find(v => v.site === "YouTube");
+    const tmdbVideo = trailer || teaser || clip || firstVideo;
+    
+    // Determine video source
+    let videoUrl: string;
+    let videoType: string;
     let techOrder: string[] | undefined;
     
-    if (fullMovieSource?.type === 'stremio') {
-      // Priority 1: Use Stremio stream (full movie)
-      videoUrl = fullMovieSource.url;
-      // Determine video type from URL
-      if (videoUrl.includes('.m3u8')) {
-        videoType = 'application/x-mpegURL';
-      } else if (videoUrl.includes('.mpd')) {
-        videoType = 'application/dash+xml';
-      } else {
-        videoType = 'video/mp4';
-      }
-      techOrder = undefined;
-    } else if (fullMovieSource && fullMovieSource.type === 'youtube') {
-      // Priority 2: YouTube video from custom source (full movie)
-      videoUrl = fullMovieSource.url;
-      videoType = "video/youtube";
-      techOrder = ["youtube"];
-    } else if (fullMovieSource && ['hls', 'mp4', 'dash', 'webm'].includes(fullMovieSource.type)) {
-      // Priority 3: Use full movie from video hosting service (HLS, MP4, etc.)
+    if (fullMovieSource && fullMovieSource.type !== 'youtube' && fullMovieSource.type !== 'vidsrc') {
+      // Use full movie from video hosting service (HLS, MP4, etc.)
       videoUrl = fullMovieSource.url;
       videoType = getVideoJsType(fullMovieSource);
       techOrder = undefined; // Use native HTML5 player for HLS/MP4
-    }
-    
-    // Only return video options if we have a valid full movie source
-    if (!videoUrl || !videoType) {
-      return null;
+    } else if (tmdbVideo?.key) {
+      // Use TMDB trailer as fallback
+      videoUrl = `${YOUTUBE_URL}${tmdbVideo.key}`;
+      videoType = "video/youtube";
+      techOrder = ["youtube"];
+    } else if (fullMovieSource?.type === 'youtube') {
+      // YouTube video from custom source
+      videoUrl = fullMovieSource.url;
+      videoType = "video/youtube";
+      techOrder = ["youtube"];
+    } else {
+      // Default sample video
+      videoUrl = "https://bitmovin-a.akamaihd.net/content/sintel/hls/playlist.m3u8";
+      videoType = "application/x-mpegURL";
+      techOrder = undefined;
     }
     
     return {
@@ -187,7 +130,7 @@ export function Component() {
         },
       ],
     };
-  }, [windowSize, movieDetail, movieId, isStremio, fullMovieSource]);
+  }, [windowSize, movieDetail, movieId, isVidsrc, fullMovieSource]);
 
   useEffect(() => {
     if (!mediaType || !id) {
@@ -277,91 +220,35 @@ export function Component() {
     return <MainLoadingScreen />;
   }
 
-  // Only render player if we have a valid full movie source
-  if (!fullMovieSource) {
-    return (
-      <Box
-        sx={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          minHeight: "100vh",
-          bgcolor: "black",
-          color: "white",
-        }}
-      >
-        <Typography variant="h5" sx={{ mb: 2 }}>
-          Full movie source not available
-        </Typography>
-        <Typography variant="body1" sx={{ mb: 3, textAlign: "center", maxWidth: 500 }}>
-          The full movie is not available at this time. Please check back later or try another title.
-        </Typography>
-        <PlayerControlButton onClick={handleGoBack}>
-          <KeyboardBackspaceIcon sx={{ mr: 1 }} />
-          <Typography>Go Back</Typography>
-        </PlayerControlButton>
-      </Box>
-    );
-  }
-
-  // Use Vidsrc player if Vidsrc source is available
-  if (isVidsrc && fullMovieSource.tmdbId) {
+  // Use Vidsrc iframe for full movies
+  if (isVidsrc && movieId) {
     return (
       <Box
         sx={{
           position: "relative",
           width: "100vw",
           height: "100vh",
-          bgcolor: "black",
+          overflow: "hidden",
         }}
       >
-        <Box px={2} sx={{ position: "absolute", top: 20, zIndex: 1001 }}>
+        <Box px={2} sx={{ position: "absolute", top: 75, zIndex: 1000 }}>
           <PlayerControlButton onClick={handleGoBack}>
             <KeyboardBackspaceIcon />
           </PlayerControlButton>
         </Box>
-        {omdbData && (
-          <Box
-            sx={{
-              position: "absolute",
-              top: 100,
-              right: 20,
-              zIndex: 1001,
-              bgcolor: "rgba(0, 0, 0, 0.7)",
-              px: 2,
-              py: 1,
-              borderRadius: 1,
-              maxWidth: 300,
-            }}
-          >
-            {omdbData.imdbRating && (
-              <Typography variant="body2" color="white" sx={{ mb: 0.5 }}>
-                IMDB: {omdbData.imdbRating}/10
-              </Typography>
-            )}
-            {omdbData.Ratings?.find((r: any) => r.Source === "Rotten Tomatoes") && (
-              <Typography variant="body2" color="white">
-                Rotten Tomatoes: {omdbData.Ratings.find((r: any) => r.Source === "Rotten Tomatoes")?.Value}
-              </Typography>
-            )}
-          </Box>
-        )}
         <VidsrcPlayer
-          tmdbId={fullMovieSource.tmdbId}
+          tmdbId={movieId}
           mediaType={mediaTypeStr}
-          season={fullMovieSource.season}
-          episode={fullMovieSource.episode}
           sx={{
-            width: "100%",
-            height: "100%",
+            width: windowSize.width,
+            height: windowSize.height,
           }}
         />
       </Box>
     );
   }
 
-  // Use VideoJS player for other full movie sources (Stremio, HLS, MP4, etc.)
+  // Use VideoJS player for trailers and other sources
   if (videoJsOptions && !!videoJsOptions.width) {
     return (
       <Box
@@ -370,32 +257,6 @@ export function Component() {
         }}
       >
         <VideoJSPlayer options={videoJsOptions} onReady={handlePlayerReady} />
-        {omdbData && (
-          <Box
-            sx={{
-              position: "absolute",
-              top: 100,
-              right: 20,
-              zIndex: 1001,
-              bgcolor: "rgba(0, 0, 0, 0.7)",
-              px: 2,
-              py: 1,
-              borderRadius: 1,
-              maxWidth: 300,
-            }}
-          >
-            {omdbData.imdbRating && (
-              <Typography variant="body2" color="white" sx={{ mb: 0.5 }}>
-                IMDB: {omdbData.imdbRating}/10
-              </Typography>
-            )}
-            {omdbData.Ratings?.find((r: any) => r.Source === "Rotten Tomatoes") && (
-              <Typography variant="body2" color="white">
-                Rotten Tomatoes: {omdbData.Ratings.find((r: any) => r.Source === "Rotten Tomatoes")?.Value}
-              </Typography>
-            )}
-          </Box>
-        )}
         {playerRef.current && playerInitialized && (
           <Box
             sx={{
